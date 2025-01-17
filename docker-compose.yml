@@ -1,0 +1,36 @@
+version: '3'
+
+services:
+  pg:
+    image: postgres:16
+    container_name: pg-darkmode
+    restart: always
+    networks:
+      - network
+    environment:
+      - POSTGRES_DB=${PG_NAME}
+      - POSTGRES_USER=${PG_USER}
+      - POSTGRES_PASSWORD=${PG_PASSWORD}
+    volumes:
+      - ./postgres_volume:/var/lib/postgresql/data
+
+  darkmode:
+    depends_on:
+      - pg
+    image: darkmode
+    container_name: darkmode
+    restart: always
+    networks:
+      - network
+      - sinhron
+    build:
+      context: .
+      dockerfile: ./docker/Dockerfile
+    ports:
+      - "${HTTP_PORT}:5640"
+
+networks:
+  sinhron:
+    external: true
+  network:
+    driver: bridge
