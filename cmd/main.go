@@ -1,25 +1,81 @@
 package main
 
 import (
-  "fmt"
+	"fmt"
+	"log"
+	"net/http"
+
+	"github.com/Jamolkhon5/darkmode/internal/auth"
+	"github.com/Jamolkhon5/darkmode/internal/config"
+	"github.com/Jamolkhon5/darkmode/internal/handler"
+	"github.com/Jamolkhon5/darkmode/internal/repository"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jmoiron/sqlx"
+	_ "github.com/lib/pq"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
-//TIP To run your code, right-click the code and select <b>Run</b>. Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.
-
 func main() {
-  //TIP Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined or highlighted text
-  // to see how GoLand suggests fixing it.
-  s := "gopher"
-  fmt.Println("Hello and welcome, %s!", s)
+	// Загрузка конфигурации
+	cfg, err := config.NewConfig(".env.local")
+	if err != nil {
+		log.Fatal(err)
+	}
 
-  for i := 1; i <= 5; i++ {
-	//TIP You can try debugging your code. We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-	// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>. To start your debugging session, 
-	// right-click your code in the editor and select the <b>Debug</b> option. 
-	fmt.Println("i =", 100/i)
-  }
+	// Подключение к базе данных
+	dbURL := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
+		cfg.PgHost, cfg.PgPort, cfg.PgUser, cfg.PgPassword, cfg.PgName)
+
+	db, err := sqlx.Connect("postgres", dbURL)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// Создание таблицы
+	_, err = db.Exec(`
+        CREATE TABLE IF NOT EXISTS themes (
+            id SERIAL PRIMARY KEY,
+            user_id VARCHAR(255) UNIQUE NOT NULL,
+            theme VARCHAR(50) NOT NULL DEFAULT 'light',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Подключение к сервису auth
+	authConfig, err := auth.NewConfig(".auth.env")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	conn, err := grpc.Dial(authConfig.AuthAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	auth.InitClient(conn)
+
+	// Инициализация репозитория и хендлера
+	repo := repository.NewRepository(db)
+	handler := handler.NewHandler(repo)
+
+	// Настройка роутера
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.AllowContentType("application/json"))
+	r.Use(middleware.SetHeader("Content-Type", "application/json"))
+
+	r.Put("/v1/users/me/theme", handler.UpdateTheme)
+
+	// Запуск сервера
+	log.Printf("Server is running on port 5640")
+	log.Fatal(http.ListenAndServe(":5640", r))
 }
-
-//TIP See GoLand help at <a href="https://www.jetbrains.com/help/go/">jetbrains.com/help/go/</a>.
-// Also, you can try interactive lessons for GoLand by selecting 'Help | Learn IDE Features' from the main menu.

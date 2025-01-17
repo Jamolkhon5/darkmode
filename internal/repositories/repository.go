@@ -1,19 +1,19 @@
 package repository
 
 import (
+	"github.com/Jamolkhon5/darkmode/internal/models"
 	"github.com/jmoiron/sqlx"
-	"your_username/darkmode/internal/models"
 )
 
-type Repository struct {
+type repository struct {
 	db *sqlx.DB
 }
 
-func NewRepository(db *sqlx.DB) *Repository {
-	return &Repository{db: db}
+func NewRepository(db *sqlx.DB) Repository {
+	return &repository{db: db}
 }
 
-func (r *Repository) UpdateTheme(userID string, theme string) (*models.Theme, error) {
+func (r *repository) UpdateTheme(userID string, theme string) (*models.Theme, error) {
 	query := `
         INSERT INTO themes (user_id, theme) 
         VALUES ($1, $2)
